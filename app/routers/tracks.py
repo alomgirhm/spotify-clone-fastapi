@@ -1,64 +1,57 @@
-from operator import index
 from sqlalchemy.orm import Session
 from typing import List
-from fastapi import APIRouter , HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends
 from app.schemas import TrackModel, TrackUpdateModel, Track, TrackCreate
 from app.dependencies import get_db
-from app.crud.tracks_crud import create_track
-
+from app.crud.tracks_crud import (
+    create_track,
+    get_all_tracks,
+    get_track,
+    delete_track,
+    update_track
+)
 
 tracks_router = APIRouter()
 
-tracks = []
+# bug 1 fix — database থেকে আনো
+@tracks_router.get("/tracks/", response_model=List[TrackModel])
+def get_tracks(db: Session = Depends(get_db)):
+    return get_all_tracks(db=db)
 
-@tracks_router.get("/tracks/",response_model = List [TrackModel])
-def get_tracks():
-    return tracks
+# এইটা আগে থেকেই ঠিক ছিলো
+@tracks_router.post("/tracks", response_model=Track)
+def create_track_route(track_dto: TrackCreate, db: Session = Depends(get_db)):
+    return create_track(db=db, track_dto=track_dto)
 
-@tracks_router.post("/tracks", response_model = Track)
-def create_track_route(track_dto : TrackCreate, db: Session = Depends(get_db)): 
-    return create_track(db=db , track_dto=track_dto)
+# bug 2, 4, 5 fix — database থেকে আনো, নাম change করো
+@tracks_router.get("/tracks/{track_id}", response_model=TrackModel)
+def get_single_track(track_id: int, db: Session = Depends(get_db)):
+    db_track = get_track(db=db, track_id=track_id)
+    if db_track is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not found"
+        )
+    return db_track
 
-@tracks_router.get("/tracks/{track_id}")
-def get_track_by_id(track_id: int) -> TrackModel:
-    for track in tracks:
-        if track.id == track_id:
-            return track
-    return {
-        "message": "Track not found"
-    }
-    
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Track not found")
-
-
-
-
+# bug 3, 5 fix — database থেকে delete করো
 @tracks_router.delete("/tracks/{track_id}")
-def delete_track(track_id: int) -> dict:
-    
-    for index in range(len(tracks)):
-        track = tracks[index]
+def delete_track_route(track_id: int, db: Session = Depends(get_db)):
+    result = delete_track(db=db, track_id=track_id)
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not found"
+        )
+    return {"message": "Track deleted successfully"}
 
-        if track.id == track_id:
-            tracks.pop(index)
-
-            return {
-                "message": "Track deleted successfully"
-            }
-
-    return {
-        "message": "Track not found"
-    }
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Track not found")
-
-
-@tracks_router.put("/tracks/{track_id}")
-def get_track_by_id(track_id: int, track_dto:TrackUpdateModel) -> TrackModel:
-    for index in range(len(tracks)):
-        track = tracks[index]
-        if track.id == track_id:
-            track.title = track_dto.title
-
-            return track
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Track not found")
-
+# bug 4 fix — নাম change করো
+@tracks_router.put("/tracks/{track_id}", response_model=TrackModel)
+def update_track_route(track_id: int, track_dto: TrackUpdateModel, db: Session = Depends(get_db)):
+    db_track = update_track(db=db, track_id=track_id, track_dto=track_dto)
+    if db_track is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not found"
+        )
+    return db_track
